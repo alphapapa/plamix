@@ -1,0 +1,449 @@
+#!/usr/bin/env python
+
+# TODO: add ability to read length like, e.g. "20:00" or "20m" for 20 minutes
+
+from __future__ import division
+from fnmatch import fnmatch
+import argparse
+import logging as log
+import mutagen
+import os
+import random
+import sys
+import textwrap
+
+M3U_TOKEN = '#EXTINF:'
+
+class Playlist(list):
+    def __init__(self, *args, **kwargs):
+        super(Playlist, self).__init__(args)
+        self.duration = sum([track.duration for track in args]) if args else 0
+
+    def append(self, item):
+        super(Playlist, self).append(item)
+
+        # TODO: Is there a more Pythonic way to do this?
+        self.duration += ( sum([track.duration for track in item])
+                           if isinstance(item, list)
+                           or isinstance(item, set)
+                           else item.duration )
+
+    def extend(self, item):
+        super(Playlist, self).extend(item)
+
+        # TODO: Is there a more Pythonic way to do this?
+        self.duration += ( sum([track.duration for track in item])
+                           if isinstance(item, list)
+                           or isinstance(item, set)
+                           else item.duration )
+
+class Track(object):
+    def __init__(self, duration=None, title=None, path=None):
+	self.duration = duration
+	self.title = title
+	self.path = path
+
+    # These two are the magic that makes sets work
+    def __eq__(self, other):
+        return self.path == other.path
+
+    def __hash__(self):
+        return hash(self.path)
+
+    def __str__(self):
+        return os.path.basename(self.path)
+
+def findMatchingPlaylists(filename):
+    for testFile in os.listdir('.'):
+        if fnmatch(testFile, '%s*.m3u' % filename.replace('/', '_')):
+            log.info("Found partial playlist name match: %s" % testFile)
+            yield testFile
+
+# Playlist reading stuff
+# From https://github.com/dvndrsn/M3uParser/blob/master/M3uParser.py
+# # # song info lines are formatted like:
+#EXTINF:419,Alice In Chains - Rotten Apple
+# duration (seconds)
+# Song title
+# # # file name - relative or absolute path of file
+# ..\Minus The Bear - Planet of Ice\Minus The Bear_Planet of Ice_01_Burying Luck.mp3
+def parseM3U(path):
+    log.info("Parsing file: %s" % path)
+
+    with open(path, 'r') as playlistFile:
+
+	# # # all m3u files should start with this line:
+	#EXTM3U
+	# this is not a valid M3U and we should stop..
+	line = playlistFile.readline()
+	if not line.startswith('#EXTM3U'):
+            log.warning("File might not be an M3U playlist: %s" % path)
+
+	playlist = Playlist()
+	currentTrack = Track()
+
+        # Read playlist
+	for line in playlistFile:
+	    line = line.strip()
+
+            # Parse info line for duration and title
+	    if line.startswith(M3U_TOKEN):
+		duration, title = line.split(M3U_TOKEN)[1].split(',',1)
+		currentTrack = Track(int(duration), title)
+
+            # Otherwise, get path and read duration from track if necessary
+	    elif (line):
+		currentTrack.path = line
+
+                # Get duration if necessary
+                if not currentTrack.duration:
+                    log.debug("Opening track: %s" % currentTrack.path)
+
+                    try:
+                        f = mutagen.File(currentTrack.path)
+                    except Exception, message:
+                        log.warning("Couldn't read track: %s: %s: %s" % (currentTrack.path, Exception, message))
+                    else:
+                        if f.info.duration > 0:
+                            log.debug("Duration of track: %i seconds" % f.info.duration)
+
+                            currentTrack.duration = f.info.duration
+                        else:
+                            log.debug("Track has no duration: %s" % currentTrack.path)
+
+                # Append track if duration is known
+                if (currentTrack.duration):
+                    playlist.append(currentTrack)
+                else:
+                    log.warning("Skipping track with unknown duration: %s" % currentTrack.path)
+
+                # Reset the currentTrack so it doesn't use the same info line more than once
+                currentTrack = Track()
+
+    return playlist
+
+def main():
+
+    parser = argparse.ArgumentParser(description="Mix together M3U playlists, optionally with a desired duration,"
+                                     "outputting either a list of files to STDOUT, or writing an M3U"
+                                     "playlist to a file",
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     epilog=textwrap.dedent("""\
+                                     examples:
+
+                                     Make a 30-minute playlist of classical and jazz tracks which are
+                                     instrumental, excluding Christmas music, and pipe the list of tracks
+                                     to mplayer:
+                                         plamix -d 30 classical.m3u jazz.m3u -a instrumental.m3u -e christmas.m3u | mplayer -
+
+                                     Make a playlist of all jazz tracks which include vocals, and write
+                                     them to the file vocal-jazz.m3u, overwriting it if it exists:
+                                         plamix -a jazz.m3u vocal.m3u -f -o vocal-jazz.m3u
+
+                                     Make a 15-minute playlist of all tracks from playlist files in the
+                                     current directory containing the word "classical" (e.g.
+                                     "classical guitar.m3u", "classical.m3u") and output the list of
+                                     tracks to STDOUT:
+                                         plamix classical -d 15
+
+                                     Note that plamix can match partial playlist filenames, so you can
+                                     leave off the .m3u extension if you want (however, that might
+                                     cause it to match more files than you intended; see the last
+                                     example)
+
+                                     These examples assume that you have organized your music into
+                                     similarly appropriate playlists."""))
+
+    parser.add_argument('playlists',
+                        nargs='*',
+                        help='Playlists to read from')
+    parser.add_argument('-a', '--and', dest='andPlaylists', metavar='PLAYLIST',
+                        nargs='*',
+                        help='Only use tracks which are also in these playlists')
+    parser.add_argument('-e', '--exclude', '-n', '--not', dest='excludePlaylists',
+                        nargs='*', metavar='PLAYLIST',
+                        help='Exclude tracks from these playlists')  # Use "not"?
+    parser.add_argument('-f', '--force', dest='forceOverwrite', 
+                        action="store_true",
+                        help='Overwrite existing output file')
+    parser.add_argument('-d', '--duration', metavar='MINUTES',
+                        type=int,
+                        help='Desired duration of new playlist in minutes (otherwise include all matching tracks)')
+    parser.add_argument("-o", "--output", dest="output", metavar='FILE',
+                        help="Output M3U playlist to file (otherwise print simple list of filenames to STDOUT)")
+    parser.add_argument("-v", "--verbose", dest="verbose",
+                        action="count",
+                        help="Print more output (up to -vv)")
+
+    args = parser.parse_args()
+
+    # Setup logging
+    if args.verbose == 1:
+	LOG_LEVEL = log.INFO
+    elif args.verbose >=2:
+	LOG_LEVEL = log.DEBUG
+    else:
+	LOG_LEVEL = log.WARNING
+
+    log.basicConfig(level=LOG_LEVEL, format="%(levelname)s: %(message)s")
+
+    log.debug("Args: %s" % args)
+
+    # If only filter tracks given, load them as source playlists
+    if not args.playlists and not args.andPlaylists:
+        log.critical("Please give some playlists.")
+        return False
+
+    pool = Playlist()
+
+    # Find files
+    inputFiles = dict()
+    for l, d in [[args.playlists, 'playlistFilenames'],
+                 [args.andPlaylists, 'andPlaylistFilenames'],
+                 [args.excludePlaylists, 'excludePlaylistFilenames']]:
+
+        inputFiles[d] = []
+
+        if l:
+            for filename in list(l):  # Copy list so I can modify original
+
+                if os.path.exists(filename):
+                    inputFiles[d].append(filename)
+                    l.remove(filename)
+
+                # If no file by that name, find ones that contain the string
+                else:
+
+                    # Treat all files that match a search term as a single file
+                    inputFiles[d].append([])
+                    for matchedFilename in findMatchingPlaylists(filename):
+                        inputFiles[d][-1].append(matchedFilename)
+                        if filename in l:
+                            l.remove(filename)
+
+        if l:
+            for filename in l:
+                log.warning('No playlist found for "%s"' % filename)
+
+    # Load playlists from input files
+    if inputFiles['playlistFilenames']:
+        log.debug("Loading playlists...")
+
+        for item in inputFiles['playlistFilenames']:  # Copy list so I can modify original
+
+            # Merge tracks from all lists into one list (playlistFilenames may contain strings and lists of strings)
+            if type(item) is list:
+                for filename in item:
+                    pool.extend(parseM3U(filename))
+            else:
+                 pool.extend(parseM3U(item))
+
+        if not pool:
+            log.critical("No tracks found.")
+            return False
+
+        # Remove dupes
+        pool = Playlist(*set(pool))
+
+        log.debug("Tracks found: %s" % len(pool))
+
+    # Filter tracks
+    if inputFiles['andPlaylistFilenames']:
+
+        # Parse and-playlists
+        log.debug("Loading and-playlists...")
+
+        andPlaylists = []  # List of playlists
+        for item in inputFiles['andPlaylistFilenames']:
+            if type(item) == list:
+                # Treat all files that match a search term as a single file
+                andPlaylists.append(Playlist())
+                for filename in item:
+                    andPlaylists[-1].extend(parseM3U(filename))
+            else:
+                andPlaylists.append(parseM3U(item))
+
+        log.debug("Found %s tracks in %s and-playlists" % (sum([len(l) for l in andPlaylists]), len(andPlaylists)))
+
+        # If only doing and-playlists
+        if not inputFiles['playlistFilenames']:
+
+            # This is getting way too complicated.  Too much applying/unpacking going on.
+            pool = Playlist(
+                *set.intersection(
+                    *[set(l) for l in andPlaylists]))
+
+        else:
+            pool = set(pool)
+            # Filter the playlist
+            for filterNumber, filterPlaylist in enumerate(andPlaylists):
+                log.debug("Filter tracks found for file: %s: %s" % (inputFiles['andPlaylistFilenames'][filterNumber], len(filterPlaylist)))
+
+                pool.intersection_update(filterPlaylist)
+
+                log.debug("Playlist now %s tracks long" % len(pool))
+
+            pool = Playlist(*pool)
+
+        # Check result
+        if not pool:
+            log.critical("No tracks match filter lists.")
+            return False
+
+    # Exclude tracks
+    if inputFiles['excludePlaylistFilenames']:
+        log.debug("Loading exclude playlists...")
+
+        excludePlaylist = set()
+        for item in inputFiles['excludePlaylistFilenames']:
+            if type(item) is list:
+                for filename in item:
+                    excludePlaylist.update(parseM3U(filename))  # Extend, not append here
+            else:
+                excludePlaylist.update(parseM3U(item))  # Extend, not append here
+
+        if not excludePlaylist:
+            log.warning("No tracks found in exclude playlists.")
+        else:
+            log.debug("Found %s exclude tracks" % len(excludePlaylist))
+
+            durationBeforeExclusion = len(pool)
+            pool = Playlist(*set(pool).difference(excludePlaylist))
+
+            log.info("Excluded %s tracks" % (durationBeforeExclusion - len(pool)))
+
+    # Check result
+    if not pool:
+        log.error("No tracks remaining to use.")
+        return False
+
+    log.debug("Pool: %s tracks, %s seconds" % (len(pool), pool.duration))
+
+    # Build new playlist
+    originalPool = Playlist(*pool)
+    newPlaylist = Playlist()
+    numInputTracks = len(pool)
+
+    # Using duration
+    if args.duration:
+
+        args.duration = int(args.duration) * 60  # Convert duration to seconds
+
+        if pool.duration < (args.duration - 30):  # If the pool is shorter than the desired duration, it will be necessary to repeat some tracks
+            allowDuplicates = True
+            log.debug('Track pool duration (%s seconds) shorter than desired duration (%s seconds); will allow duplicate tracks in output' % (pool.duration, args.duration))
+            newPlaylist = Playlist(*pool)  # Start with all the tracks
+
+        else:
+            allowDuplicates = False
+            log.debug('Not allowing duplicate tracks in output')
+
+        tries = 1
+        while True:
+            remainingTime = args.duration - newPlaylist.duration
+
+            # Isn't there some way to do this in the while condition in Python?
+            tracksThatFit = [track for track in pool if track.duration < remainingTime]  # Can I/should I use a set comprehension instead of a listcomp?
+
+            log.debug("Tracks that fit in remaining time of %s seconds: %s" % (remainingTime, len(tracksThatFit)))
+
+            # Are we there yet?
+            if not tracksThatFit:
+                log.debug("No tracks remaining that fit in remaining time of %s seconds" % (remainingTime))
+
+                # If not within 30 seconds of desired time, start over
+                if (args.duration - newPlaylist.duration > 30):
+
+                    # TODO: Increase margin gradually. This will help
+                    # prevent situations where, e.g. the desired
+                    # duration is 25 minutes, but the closest it can get
+                    # is 24 minutes, and after the 10 tries, it
+                    # happens to go with one that's only 21 minutes
+                    # long instead of 24.
+                    if tries == len(originalPool):
+                        log.warning("Tried %s times to make a playlist within 30 seconds of the desired duration; gave up and made one %s seconds long."
+                                    % (tries, newPlaylist.duration))
+                        break
+
+                    log.debug("Not within 30 seconds of desired playlist duration.  Trying again...")
+
+                    if not allowDuplicates:
+                        pool = Playlist()
+                        pool.extend(originalPool)
+                        newPlaylist = Playlist()
+                    else:
+                        # Add all tracks to playlist
+                        newPlaylist = Playlist(*pool)
+
+                    tries += 1
+
+                # We are there yet.
+                else:
+                    log.debug("Took %s tries to make playlist" % tries)
+
+                    break
+
+            # Keep going
+            else:
+                newTrack = random.choice(tracksThatFit)
+                newPlaylist.append(newTrack)
+                log.debug("Adding track: %s" % newTrack)
+                if not allowDuplicates:
+                    pool.remove(newTrack)
+
+
+    else:
+        # No duration; use all tracks
+        newPlaylist = Playlist(*pool)
+
+        # TODO: Shuffle it since it doesn't get created randomly
+
+    if args.output:
+        # Output new playlist to file
+
+        # Fix filename
+        filename = "%s.m3u" % (args.output.replace('.m3u', ''))
+
+        # Don't overwrite existing playlist unless forcing
+        if os.path.exists(filename):
+            if not args.forceOverwrite:
+                log.critical("Filename exists and not overwriting (use -f): %s" % filename)
+                return False
+
+            log.debug("File exists and forcing overwrite: %s" % filename)
+
+        # Write file
+        try:
+            with open(filename, 'w') as f:
+                f.write("#EXTM3U\n")
+
+                for track in newPlaylist:
+                    f.write("%s%s,%s\n" % (M3U_TOKEN, track.duration, track.title))
+                    f.write("%s\n" % track.path)
+
+            log.debug("Wrote playlist: %s" % filename)
+
+        except Exception, message:
+            log.critical("Unable to write file: %s: %s: %s" % (filename, Exception, message))
+            return False
+
+    else:
+        # Just print new playlist
+        for track in newPlaylist:
+            print track.path
+
+    if args.duration:
+        log.info("New playlist duration: %i of %s desired seconds" % (newPlaylist.duration, args.duration))
+        log.info("Used %i (%i%%) of %i tracks"
+                 % ( len(newPlaylist), (round(len(newPlaylist) / numInputTracks, 2)) * 100,
+                     numInputTracks))
+    else:
+        hours = newPlaylist.duration // 3600
+        minutes = newPlaylist.duration // 60 % 60
+        seconds = newPlaylist.duration % 60 % 60
+        log.info("New playlist: %s tracks, %ih:%im:%is" % (numInputTracks, hours, minutes, seconds))
+
+    return True
+
+if __name__ == "__main__":
+    sys.exit(0 if main() else 1)

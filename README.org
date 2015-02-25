@@ -1,0 +1,59 @@
+* plamix
+=plamix= is a Python utility to mix or blend together M3U playlists.  It can do logical operations like AND, OR, and NOT on the tracks in multiple playlists, and it can create playlists of a certain duration.
+
+It is most useful if you organize your music library into playlists by genre, musical attributes, subjective qualities, etc.
+
+** Requirements
++ Python 2.7+ (it might work on 2.6...)
++ python-mutagen (used for reading the duration from tracks if their duration is not listed in an M3U playlist)
+  
+** Usage
+#+BEGIN_SRC
+usage: plamix [-h] [-a [PLAYLIST [PLAYLIST ...]]]
+              [-e [PLAYLIST [PLAYLIST ...]]] [-f] [-d MINUTES] [-o FILE] [-v]
+              [playlists [playlists ...]]
+
+Mix together M3U playlists, optionally with a desired duration, outputting either
+a list of files to STDOUT, or writing an M3U playlist to a file
+
+positional arguments:
+  playlists             Playlists to read from
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -a [PLAYLIST [PLAYLIST ...]], --and [PLAYLIST [PLAYLIST ...]]
+                        Only use tracks which are also in these playlists
+  -e [PLAYLIST [PLAYLIST ...]], --exclude [PLAYLIST [PLAYLIST ...]], -n [PLAYLIST [PLAYLIST ...]],--not [PLAYLIST [PLAYLIST ...]]
+                        Exclude tracks from these playlists
+  -f, --force           Overwrite existing output file
+  -d MINUTES, --duration MINUTES
+                        Desired duration of new playlist in minutes (otherwise
+                        include all matching tracks)
+  -o FILE, --output FILE
+                        Output M3U playlist to file (otherwise print simple
+                        list of filenames to STDOUT)
+  -v, --verbose         Print more output (up to -vv)
+#+END_SRC
+
+Note that =plamix= can match partial playlist filenames, so you can leave off the =.m3u= extension if you want (however, that might cause it to match more files than you intended; see the last example below)
+** Examples
+Make a 30-minute playlist of classical and jazz tracks which are instrumental, excluding Christmas music, and pipe the list of tracks to mplayer:
+
+=plamix -d 30 classical.m3u jazz.m3u -a instrumental.m3u -e christmas.m3u | mplayer -=
+
+Make a playlist of all jazz tracks which include vocals, and write them to the file vocal-jazz.m3u, overwriting it if it exists:
+
+=plamix -a jazz.m3u vocal.m3u -f -o vocal-jazz.m3u=
+
+Make a 15-minute playlist of all tracks from playlist files in the current directory containing the word "classical" (e.g.
+=classical guitar.m3u=, =classical.m3u=) and output the list of tracks to STDOUT:
+
+=plamix classical -d 15=
+
+These examples assume that you have organized your music into similarly appropriate playlists.
+
+** TODOs
++ Add support for SQL databases used by, e.g. Clementine.  This would make it easy to support finding tracks by artist, album etc. instead of only using tracks which are already in playlist files.
+  
+** License
+GPLv2
