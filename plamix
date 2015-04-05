@@ -2,6 +2,12 @@
 
 # TODO: add ability to read length like, e.g. "20:00" or "20m" for 20 minutes
 
+# BUG: There seems to be a bug causing tracks to be
+# duplicated. e.g. "pmc for-sleeping occasion/sleeping" with no
+# duration resulted in 20 duplicate tracks out of 63 total. Probably
+# they were tracks that were in both playlists, but they should have
+# been deduped.
+
 from __future__ import division
 from fnmatch import fnmatch
 import argparse
