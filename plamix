@@ -110,10 +110,10 @@ def parseM3U(path):
                     except Exception, message:
                         log.warning("Couldn't read track: %s: %s: %s" % (currentTrack.path, Exception, message))
                     else:
-                        if f.info.duration > 0:
-                            log.debug("Duration of track: %i seconds" % f.info.duration)
+                        if f.info.length > 0:
+                            log.debug("Duration of track: %i seconds" % f.info.length)
 
-                            currentTrack.duration = f.info.duration
+                            currentTrack.duration = f.info.length
                         else:
                             log.debug("Track has no duration: %s" % currentTrack.path)
 
@@ -169,7 +169,7 @@ def main():
     parser.add_argument('-e', '--exclude', '-n', '--not', dest='excludePlaylists',
                         nargs='*', metavar='PLAYLIST',
                         help='Exclude tracks from these playlists')  # Use "not"?
-    parser.add_argument('-f', '--force', dest='forceOverwrite', 
+    parser.add_argument('-f', '--force', dest='forceOverwrite',
                         action="store_true",
                         help='Overwrite existing output file')
     parser.add_argument('-d', '--duration', metavar='MINUTES',
