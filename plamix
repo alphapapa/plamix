@@ -202,34 +202,36 @@ def main():
 
     pool = Playlist()
 
-    # Find files
+    # Find playlist files
     inputFiles = dict()
-    for l, d in [[args.playlists, 'playlistFilenames'],
-                 [args.andPlaylists, 'andPlaylistFilenames'],
-                 [args.excludePlaylists, 'excludePlaylistFilenames']]:
+    for tokenList, playlistType in [[args.playlists, 'playlistFilenames'],
+                                    [args.andPlaylists, 'andPlaylistFilenames'],
+                                    [args.excludePlaylists, 'excludePlaylistFilenames']]:
 
-        inputFiles[d] = []
+        inputFiles[playlistType] = []
 
-        if l:
-            for filename in list(l):  # Copy list so I can modify original
+        if tokenList:
+            for token in list(tokenList):  # Copy list so I can modify original
 
-                if os.path.exists(filename):
-                    inputFiles[d].append(filename)
-                    l.remove(filename)
+                if os.path.exists(token):
+                    inputFiles[playlistType].append(token)
+                    tokenList.remove(token)
 
-                # If no file by that name, find ones that contain the string
                 else:
+                    # No file by that name; find files matching token
 
-                    # Treat all files that match a search term as a single file
-                    inputFiles[d].append([])
-                    for matchedFilename in findMatchingPlaylists(filename):
-                        inputFiles[d][-1].append(matchedFilename)
-                        if filename in l:
-                            l.remove(filename)
+                    # Treat all files that match a search term as a
+                    # single file
+                    inputFiles[playlistType].append([])
+                    for filename in findMatchingPlaylists(token):
+                        inputFiles[playlistType][-1].append(filename)
+                        if token in tokenList:
+                            tokenList.remove(token)
 
-        if l:
-            for filename in l:
-                log.warning('No playlist found for "%s"' % filename)
+        if tokenList:
+            # Give warning about tokens without matches
+            for token in tokenList:
+                log.warning('No playlist found for "%s"' % token)
 
     # Load playlists from input files
     if inputFiles['playlistFilenames']:
