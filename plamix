@@ -402,7 +402,8 @@ def main():
         # No duration; use all tracks
         newPlaylist = Playlist(*pool)
 
-        # TODO: Shuffle it since it doesn't get created randomly
+        # Shuffle it since it doesn't get created randomly
+        random.shuffle(newPlaylist)
 
     if args.output:
         # Output new playlist to file
