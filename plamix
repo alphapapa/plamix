@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 # * plamix
+# ** TODOs
+# *** TODO add ability to read length like, e.g. "20:00" or "20m" for 20 minutes
 
-# TODO: add ability to read length like, e.g. "20:00" or "20m" for 20 minutes
-
-# BUG: There seems to be a bug causing tracks to be
-# duplicated. e.g. "pmc for-sleeping occasion/sleeping" with no
-# duration resulted in 20 duplicate tracks out of 63 total. Probably
-# they were tracks that were in both playlists, but they should have
-# been deduped.
+# *** TODO Duplicated tracks bug?
+# There seems to be a bug causing tracks to be duplicated. e.g. "pmc
+# for-sleeping occasion/sleeping" with no duration resulted in 20
+# duplicate tracks out of 63 total. Probably they were tracks that were
+# in both playlists, but they should have been deduped.
 
 # ** Imports
 
@@ -71,7 +71,7 @@ class Track(object):
 
 def findMatchingPlaylists(filename):
     for testFile in os.listdir('.'):
-        if fnmatch(testFile, '%s*.m3u' % filename.replace('/', '_')):
+        if fnmatch(testFile, '*%s*.m3u' % filename.replace('/', '_')):
             log.info("Found partial playlist name match: %s" % testFile)
             yield testFile
 
