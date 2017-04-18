@@ -19,6 +19,7 @@ import logging as log
 import mutagen
 import os
 import random
+import re
 import sys
 import textwrap
 
@@ -68,6 +69,14 @@ class Track(object):
         return os.path.basename(self.path)
 
 # ** Functions
+
+def myrange(start, end, step):
+    ret = []
+    i = start
+    while i <= end:
+        ret.extend([i])
+        i += step
+    return ret
 
 def findMatchingPlaylists(filename):
     for testFile in os.listdir('.'):
@@ -187,6 +196,8 @@ def main():
                         help='Desired duration of new playlist in minutes (otherwise include all matching tracks)')
     parser.add_argument("-o", "--output", dest="output", metavar='FILE',
                         help="Output M3U playlist to file (otherwise print simple list of filenames to STDOUT)")
+    parser.add_argument("-r", "--rating", dest="rating",
+                        help="Minimum track rating (i.e. track is in a \"rating-X.X.m3u\" playlist, where X.X is >= than RATING)")
     parser.add_argument("-v", "--verbose", dest="verbose",
                         action="count",
                         help="Print more output (up to -vv)")
@@ -340,6 +351,44 @@ def main():
             pool = Playlist(*set(pool).difference(excludePlaylist))
 
             log.info("Excluded %s tracks" % (durationBeforeExclusion - len(pool)))
+
+    # *** Apply rating tests
+
+    if args.rating:
+
+        # Convert rating to float
+        min_rating = float(args.rating)
+
+        # Make list of acceptable ratings
+        ratings = myrange(min_rating, 5.0, 0.5)
+
+        # Load rating playlists
+        rating_playlists = []
+        for rating in ratings:
+            for filename in findMatchingPlaylists("rating-%s" % rating):
+                # Is it just me, or does this packing/unpacking/appending/extending start to get confusing?
+                rating_playlists.append(Playlist(*parseM3U(filename)))
+
+        # Merge rating playlists
+        # FIXME: Should just do this when the lists are loaded instead of as a separate step
+        rating_pool = [t
+                       for l in rating_playlists
+                       for t in l]
+
+        log.debug("Tracks in rating pool: %s", len(rating_pool))
+        log.debug("Tracks before rating-filtering: %s", len(pool))
+
+        # FIXME: All this converting lists to sets and back can't be
+        # good for performance.  Maybe Playlist should be based on set
+        # instead of list.
+
+        # Keep only tracks in these rating playlists
+        pool = Playlist(
+            *set.intersection(
+                set(pool),
+                set(rating_pool)))
+
+        log.debug("Tracks after rating-filtering: %s", len(pool))
 
     # *** Check result
     if not pool:
