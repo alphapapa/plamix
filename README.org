@@ -8,32 +8,37 @@ It is most useful if you organize your music library into playlists by genre, mu
 + python-mutagen (used for reading the duration from tracks if their duration is not listed in an M3U playlist)
   
 ** Usage
-#+BEGIN_SRC
-usage: plamix [-h] [-a [PLAYLIST [PLAYLIST ...]]]
-              [-e [PLAYLIST [PLAYLIST ...]]] [-f] [-d MINUTES] [-o FILE] [-v]
-              [playlists [playlists ...]]
+#+BEGIN_EXAMPLE
+  usage: plamix [-h] [-a [PLAYLIST [PLAYLIST ...]]]
+                [-e [PLAYLIST [PLAYLIST ...]]] [-f] [-d MINUTES] [-o FILE]
+                [-r RATING] [-v]
+                [playlists [playlists ...]]
 
-Mix together M3U playlists, optionally with a desired duration, outputting either
-a list of files to STDOUT, or writing an M3U playlist to a file
+  Mix together M3U playlists, optionally with a desired duration, outputting either
+  a list of files to STDOUT, or writing an M3U playlist to a file
 
-positional arguments:
-  playlists             Playlists to read from
+  positional arguments:
+    playlists             Playlists to read from
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -a [PLAYLIST [PLAYLIST ...]], --and [PLAYLIST [PLAYLIST ...]]
-                        Only use tracks which are also in these playlists
-  -e [PLAYLIST [PLAYLIST ...]], --exclude [PLAYLIST [PLAYLIST ...]], -n [PLAYLIST [PLAYLIST ...]],--not [PLAYLIST [PLAYLIST ...]]
-                        Exclude tracks from these playlists
-  -f, --force           Overwrite existing output file
-  -d MINUTES, --duration MINUTES
-                        Desired duration of new playlist in minutes (otherwise
-                        include all matching tracks)
-  -o FILE, --output FILE
-                        Output M3U playlist to file (otherwise print simple
-                        list of filenames to STDOUT)
-  -v, --verbose         Print more output (up to -vv)
-#+END_SRC
+  optional arguments:
+    -h, --help            show this help message and exit
+    -a [PLAYLIST [PLAYLIST ...]], --and [PLAYLIST [PLAYLIST ...]]
+                          Only use tracks which are also in these playlists
+    -e [PLAYLIST [PLAYLIST ...]], --exclude [PLAYLIST [PLAYLIST ...]], -n [PLAYLIST [PLAYLIST ...]],--not [PLAYLIST [PLAYLIST ...]]
+                          Exclude tracks from these playlists
+    -f, --force           Overwrite existing output file
+    -d MINUTES, --duration MINUTES
+                          Desired duration of new playlist in minutes (otherwise
+                          include all matching tracks)
+    -o FILE, --output FILE
+                          Output M3U playlist to file (otherwise print simple
+                          list of filenames to STDOUT)
+    -r RATING, --rating RATING
+                          Minimum track rating (i.e. track is in a
+                          "rating-X.X.m3u" playlist, where X.X is >= than
+                          RATING)
+    -v, --verbose         Print more output (up to -vv)
+#+END_EXAMPLE
 
 Note that =plamix= can match partial playlist filenames, so you can leave off the =.m3u= extension if you want (however, that might cause it to match more files than you intended; see the last example below)
 ** Examples
