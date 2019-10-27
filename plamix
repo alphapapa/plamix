@@ -68,6 +68,23 @@ class Track(object):
     def __str__(self):
         return os.path.basename(self.path)
 
+    def read_from_file(self):
+        "Read file duration from file with Mutagen."
+
+        log.debug("Opening track: %s" % self.path)
+
+        try:
+            f = mutagen.File(self.path)
+        except Exception, message:
+            log.warning("Couldn't read track: %s: %s: %s" % (self.path, Exception, message))
+        else:
+            if f.info.length > 0:
+                log.debug("Duration of track: %i seconds" % f.info.length)
+
+                self.duration = f.info.length
+            else:
+                log.debug("Track has no duration: %s" % self.path)
+
 # ** Functions
 
 def myrange(start, end, step):
@@ -122,19 +139,7 @@ def parseM3U(path):
 
                 # Get duration if necessary
                 if not currentTrack.duration:
-                    log.debug("Opening track: %s" % currentTrack.path)
-
-                    try:
-                        f = mutagen.File(currentTrack.path)
-                    except Exception, message:
-                        log.warning("Couldn't read track: %s: %s: %s" % (currentTrack.path, Exception, message))
-                    else:
-                        if f.info.length > 0:
-                            log.debug("Duration of track: %i seconds" % f.info.length)
-
-                            currentTrack.duration = f.info.length
-                        else:
-                            log.debug("Track has no duration: %s" % currentTrack.path)
+                    currentTrack.read_from_file()
 
                 # Append track if duration is known
                 if (currentTrack.duration):
@@ -194,6 +199,9 @@ def main():
     parser.add_argument('-d', '--duration', metavar='MINUTES',
                         type=int,
                         help='Desired duration of new playlist in minutes (otherwise include all matching tracks)')
+    parser.add_argument('-i', '--input',
+                        action="store_true", dest="read_stdin",
+                        help="Read track filenames from STDIN as a playlist")
     parser.add_argument("-o", "--output", dest="output", metavar='FILE',
                         help="Output M3U playlist to file (otherwise print simple list of filenames to STDOUT)")
     parser.add_argument("-r", "--rating", dest="rating",
@@ -217,7 +225,7 @@ def main():
     log.debug("Args: %s" % args)
 
     # *** Check args
-    if not args.playlists and not args.andPlaylists:
+    if not args.playlists and not args.andPlaylists and not args.read_stdin:
         log.critical("Please give some playlists.")
         return False
 
@@ -255,6 +263,14 @@ def main():
             # Give warning about tokens without matches
             for token in tokenList:
                 log.warning('No playlist found for "%s"' % token)
+
+    # *** Load files from STDIN
+
+    if args.read_stdin:
+        for line in sys.stdin.readlines():
+            track = Track(path=line.strip())
+            track.read_from_file()
+            pool.append(track)
 
     # *** Load playlists
     if inputFiles['playlistFilenames']:
